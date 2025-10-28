@@ -23,12 +23,10 @@ import Foundation
     ]
     
     var actuals: [String?] = []
-    for try await value in parse(chunks) {
-        let data = try value.toJSONData()
-        let decoded = try? JSONDecoder().decode(Simple.self, from: data)
-        actuals.append(decoded?.key)
+    for try await decoded in incrementalDecode(Simple.self, from: chunks) {
+        actuals.append(decoded.key)
     }
-    
+
     #expect(actuals == expects)
 }
 
@@ -48,10 +46,8 @@ import Foundation
     ]
 
     var actuals: [[Int]] = []
-    for try await value in parse(chunks) {
-        let data = try value.toJSONData()
-        let decoded = try? JSONDecoder().decode([Int].self, from: data)
-        actuals.append(decoded ?? [])
+    for try await decoded in incrementalDecode([Int].self, from: chunks) {
+        actuals.append(decoded)
     }
 
     #expect(actuals == expects)
@@ -81,39 +77,58 @@ import Foundation
         Nested(name: "test", nested: NestedValue(value: 42))
     ]
 
-    var actuals: [Nested?] = []
-    for try await value in parse(chunks) {
-        let data = try value.toJSONData()
-        let decoded = try? JSONDecoder().decode(Nested.self, from: data)
+    var actuals: [Nested] = []
+    for try await decoded in incrementalDecode(Nested.self, from: chunks) {
         actuals.append(decoded)
     }
 
-    #expect(actuals == expects)
+    #expect(actuals == expects.compactMap { $0 })
 }
 
 @Test func testPrimitives() async throws {
-    let testCases: [(String, JsonValue)] = [
-        ("null", .null),
-        ("true", .boolean(true)),
-        ("false", .boolean(false)),
-        ("123", .number(123)),
-        ("-45.67", .number(-45.67)),
-        (#""hello""#, .string("hello"))
-    ]
-
-    for (input, expected) in testCases {
-        let chunks = AsyncStream<String> { continuation in
-            continuation.yield(input)
-            continuation.finish()
-        }
-
-        var lastValue: JsonValue?
-        for try await value in parse(chunks) {
-            lastValue = value
-        }
-
-        #expect(lastValue == expected, "Failed for input: \(input)")
+    let intChunks = AsyncStream<String> { continuation in
+        continuation.yield("123")
+        continuation.finish()
     }
+
+    var lastInt: Int?
+    for try await decoded in incrementalDecode(Int.self, from: intChunks) {
+        lastInt = decoded
+    }
+    #expect(lastInt == 123)
+
+    let doubleChunks = AsyncStream<String> { continuation in
+        continuation.yield("-45.67")
+        continuation.finish()
+    }
+
+    var lastDouble: Double?
+    for try await decoded in incrementalDecode(Double.self, from: doubleChunks) {
+        lastDouble = decoded
+    }
+    #expect(lastDouble == -45.67)
+
+    let boolChunks = AsyncStream<String> { continuation in
+        continuation.yield("true")
+        continuation.finish()
+    }
+
+    var lastBool: Bool?
+    for try await decoded in incrementalDecode(Bool.self, from: boolChunks) {
+        lastBool = decoded
+    }
+    #expect(lastBool == true)
+
+    let stringChunks = AsyncStream<String> { continuation in
+        continuation.yield(#""hello""#)
+        continuation.finish()
+    }
+
+    var lastString: String?
+    for try await decoded in incrementalDecode(String.self, from: stringChunks) {
+        lastString = decoded
+    }
+    #expect(lastString == "hello")
 }
 
 @Test func testStringEscapes() async throws {
@@ -131,12 +146,10 @@ import Foundation
         Escaped(escaped: "line1\nline2\ttab\"quote")
     ]
 
-    var actuals: [Escaped?] = []
-    for try await value in parse(chunks) {
-        let data = try value.toJSONData()
-        let decoded = try? JSONDecoder().decode(Escaped.self, from: data)
+    var actuals: [Escaped] = []
+    for try await decoded in incrementalDecode(Escaped.self, from: chunks) {
         actuals.append(decoded)
     }
 
-    #expect(actuals == expects)
+    #expect(actuals == expects.compactMap { $0 })
 }

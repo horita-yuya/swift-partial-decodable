@@ -27,8 +27,25 @@ public enum JsonValue: Equatable {
         }
     }
 
-    public func toJSONData() throws -> Data {
-        return try JSONSerialization.data(withJSONObject: toAny(), options: [])
+    fileprivate func toJSONData() throws -> Data {
+        switch self {
+        case .null:
+            return "null".data(using: .utf8)!
+        case .boolean(let value):
+            return (value ? "true" : "false").data(using: .utf8)!
+        case .number(let value):
+            return "\(value)".data(using: .utf8)!
+        case .string(let value):
+            let escaped = value
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+                .replacingOccurrences(of: "\n", with: "\\n")
+                .replacingOccurrences(of: "\r", with: "\\r")
+                .replacingOccurrences(of: "\t", with: "\\t")
+            return "\"\(escaped)\"".data(using: .utf8)!
+        case .array, .object:
+            return try JSONSerialization.data(withJSONObject: toAny(), options: [])
+        }
     }
 
     private func toAny() -> Any {
@@ -413,32 +430,52 @@ public class Parser: TokenHandler {
     }
 }
 
-public struct IncrementalJSONParser<S: AsyncSequence>: AsyncSequence where S.Element == String {
-    public typealias Element = JsonValue
+public struct IncrementalJSONParser<T, S: AsyncSequence>: AsyncSequence where S.Element == String {
+    public typealias Element = T
 
     private let stream: S
+    private let decoder: JSONDecoder?
+    private let transform: (JsonValue) throws -> T
 
-    public init(_ stream: S) {
+    private init(_ stream: S, decoder: JSONDecoder?, transform: @escaping (JsonValue) throws -> T) {
         self.stream = stream
+        self.decoder = decoder
+        self.transform = transform
+    }
+
+    public init(_ stream: S) where T == JsonValue {
+        self.init(stream, decoder: nil) { $0 }
+    }
+
+    public init(_ stream: S, decoder: JSONDecoder = JSONDecoder()) where T: Decodable {
+        self.init(stream, decoder: decoder) { jsonValue in
+            let data = try jsonValue.toJSONData()
+            return try decoder.decode(T.self, from: data)
+        }
     }
 
     public struct AsyncIterator: AsyncIteratorProtocol {
         private let parser: Parser
+        private let transform: (JsonValue) throws -> T
 
-        init(_ parser: Parser) {
+        init(_ parser: Parser, transform: @escaping (JsonValue) throws -> T) {
             self.parser = parser
+            self.transform = transform
         }
 
-        public mutating func next() async throws -> JsonValue? {
-            return try await parser.next()
+        public mutating func next() async throws -> T? {
+            guard let jsonValue = try await parser.next() else {
+                return nil
+            }
+            return try transform(jsonValue)
         }
     }
 
     public func makeAsyncIterator() -> AsyncIterator {
-        return AsyncIterator(Parser(stream))
+        return AsyncIterator(Parser(stream), transform: transform)
     }
 }
 
-public func parse<S: AsyncSequence>(_ stream: S) -> IncrementalJSONParser<S> where S.Element == String {
-    return IncrementalJSONParser(stream)
+public func incrementalDecode<T: Decodable, S: AsyncSequence>(_ type: T.Type, from stream: S, decoder: JSONDecoder = JSONDecoder()) -> IncrementalJSONParser<T, S> where S.Element == String {
+    return IncrementalJSONParser(stream, decoder: decoder)
 }

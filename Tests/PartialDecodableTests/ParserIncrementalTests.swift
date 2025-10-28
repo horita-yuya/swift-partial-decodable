@@ -17,9 +17,9 @@ import Foundation
     
     let expects = [
         nil,
-        "val",
-        "value",
-        "value",
+        #"val"#,
+        #"value"#,
+        #"value"#,
     ]
     
     var actuals: [String?] = []
@@ -32,9 +32,9 @@ import Foundation
 
 @Test func testSimpleArray() async throws {
     let chunks = AsyncStream<String> { continuation in
-        continuation.yield("[1, ")
-        continuation.yield("2, ")
-        continuation.yield("3]")
+        continuation.yield(#"[1, "#)
+        continuation.yield(#"2, "#)
+        continuation.yield(#"3]"#)
         continuation.finish()
     }
 
@@ -72,9 +72,9 @@ import Foundation
 
     let expects: [Nested?] = [
         Nested(name: nil, nested: nil),
-        Nested(name: "test", nested: nil),
-        Nested(name: "test", nested: NestedValue(value: 42)),
-        Nested(name: "test", nested: NestedValue(value: 42))
+        Nested(name: #"test"#, nested: nil),
+        Nested(name: #"test"#, nested: NestedValue(value: 42)),
+        Nested(name: #"test"#, nested: NestedValue(value: 42))
     ]
 
     var actuals: [Nested] = []
@@ -87,7 +87,7 @@ import Foundation
 
 @Test func testPrimitives() async throws {
     let intChunks = AsyncStream<String> { continuation in
-        continuation.yield("123")
+        continuation.yield(#"123"#)
         continuation.finish()
     }
 
@@ -98,7 +98,7 @@ import Foundation
     #expect(lastInt == 123)
 
     let doubleChunks = AsyncStream<String> { continuation in
-        continuation.yield("-45.67")
+        continuation.yield(#"-45.67"#)
         continuation.finish()
     }
 
@@ -109,7 +109,7 @@ import Foundation
     #expect(lastDouble == -45.67)
 
     let boolChunks = AsyncStream<String> { continuation in
-        continuation.yield("true")
+        continuation.yield(#"true"#)
         continuation.finish()
     }
 
@@ -128,7 +128,7 @@ import Foundation
     for try await decoded in incrementalDecode(String.self, from: stringChunks) {
         lastString = decoded
     }
-    #expect(lastString == "hello")
+    #expect(lastString == #"hello"#)
 }
 
 @Test func testStringEscapes() async throws {
@@ -142,8 +142,8 @@ import Foundation
     }
 
     let expects: [Escaped?] = [
-        Escaped(escaped: "line1\nline2\ttab\"quote"),
-        Escaped(escaped: "line1\nline2\ttab\"quote")
+        Escaped(escaped: #"line1"# + "\n" + #"line2"# + "\t" + #"tab"quote"#),
+        Escaped(escaped: #"line1"# + "\n" + #"line2"# + "\t" + #"tab"quote"#)
     ]
 
     var actuals: [Escaped] = []

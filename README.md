@@ -14,11 +14,12 @@ struct User: Decodable {
     var email: String?
 }
 
-// Create a stream of JSON chunks
+// Create a stream of JSON chunks (simulating network packets)
+// Chunks can be split anywhere - even in the middle of keys or values
 let chunks = AsyncStream<String> { continuation in
-    continuation.yield(#"{"name":"#)
-    continuation.yield(#""Alice","#)
-    continuation.yield(#""email":"alice@example.com"}"#)
+    continuation.yield(#"{"na"#)           // Incomplete key
+    continuation.yield(#"me":"Alice","em"#) // Complete first field, incomplete key
+    continuation.yield(#"ail":"alice@example.com"}"#)
     continuation.finish()
 }
 

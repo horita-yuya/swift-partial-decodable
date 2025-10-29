@@ -304,3 +304,93 @@ import Foundation
     #expect(results.count > 0)
     #expect(results.last?.content?.text == "Hello")
 }
+
+@Test func testIncompleteKeyParsing() async throws {
+    struct User: Decodable, Equatable {
+        var name: String?
+        var email: String?
+    }
+
+    let chunks = AsyncStream<String> { continuation in
+        continuation.yield(#"{"na"#)           // Incomplete key "name"
+        continuation.yield(#"me":"Alice","em"#) // Complete first field, incomplete key "email"
+        continuation.yield(#"ail":"alice@example.com"}"#)
+        continuation.finish()
+    }
+
+    let expects: [User] = [
+        User(name: nil, email: nil),
+        User(name: "Alice", email: nil),
+        User(name: "Alice", email: "alice@example.com"),
+        User(name: "Alice", email: "alice@example.com")
+    ]
+
+    var actuals: [User] = []
+    for try await decoded in incrementalDecode(User.self, from: chunks) {
+        actuals.append(decoded)
+    }
+
+    #expect(actuals == expects)
+}
+
+@Test func testMultipleIncompleteKeys() async throws {
+    struct Data: Decodable, Equatable {
+        var firstName: String?
+        var lastName: String?
+        var age: Int?
+    }
+
+    let chunks = AsyncStream<String> { continuation in
+        continuation.yield(#"{"first"#)        // Incomplete key
+        continuation.yield(#"Name":"Jo"#)      // Key complete, value incomplete
+        continuation.yield(#"hn","lastNa"#)    // Value complete, next key incomplete
+        continuation.yield(#"me":"Doe","ag"#)  // Key complete, next key incomplete
+        continuation.yield(#"e":30}"#)         // Final field complete
+        continuation.finish()
+    }
+
+    var actuals: [Data] = []
+    for try await decoded in incrementalDecode(Data.self, from: chunks) {
+        actuals.append(decoded)
+    }
+
+    #expect(actuals.count > 0)
+    if let last = actuals.last {
+        #expect(last.firstName == "John")
+        #expect(last.lastName == "Doe")
+        #expect(last.age == 30)
+    }
+}
+
+@Test func testNestedObjectWithIncompleteKeys() async throws {
+    struct Address: Decodable, Equatable {
+        var city: String?
+        var country: String?
+    }
+
+    struct Person: Decodable, Equatable {
+        var name: String?
+        var address: Address?
+    }
+
+    let chunks = AsyncStream<String> { continuation in
+        continuation.yield(#"{"na"#)                    // Incomplete outer key
+        continuation.yield(#"me":"Alice","add"#)        // Outer key complete, next key incomplete
+        continuation.yield(#"ress":{"ci"#)              // Key complete, nested object starts, nested key incomplete
+        continuation.yield(#"ty":"Tokyo","coun"#)       // Nested key complete, next nested key incomplete
+        continuation.yield(#"try":"Japan"}}"#)          // Nested object complete
+        continuation.finish()
+    }
+
+    var actuals: [Person] = []
+    for try await decoded in incrementalDecode(Person.self, from: chunks) {
+        actuals.append(decoded)
+    }
+
+    #expect(actuals.count > 0)
+    if let last = actuals.last {
+        #expect(last.name == "Alice")
+        #expect(last.address?.city == "Tokyo")
+        #expect(last.address?.country == "Japan")
+    }
+}

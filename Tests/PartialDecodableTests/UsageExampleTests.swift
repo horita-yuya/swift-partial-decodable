@@ -140,4 +140,69 @@ import Foundation
         #expect(results.count > 0)
         #expect(results.last?.content?.text == "Streaming text")
     }
+
+    @Test func correctUsageWithAsyncBytes() async throws {
+        let jsonData = Data(#"{"content":{"text":"Streaming text"}}"#.utf8)
+
+        struct MockAsyncBytes: AsyncSequence, Sendable {
+            typealias Element = UInt8
+
+            let data: Data
+
+            struct AsyncIterator: AsyncIteratorProtocol {
+                var iterator: Data.Iterator
+
+                mutating func next() async throws -> UInt8? {
+                    return iterator.next()
+                }
+            }
+
+            func makeAsyncIterator() -> AsyncIterator {
+                return AsyncIterator(iterator: data.makeIterator())
+            }
+        }
+
+        let mockAsyncBytes = MockAsyncBytes(data: jsonData)
+
+        var results: [Response] = []
+        for try await chunk in incrementalDecode(Response.self, from: mockAsyncBytes) {
+            results.append(chunk)
+        }
+
+        #expect(results.count > 0)
+        #expect(results.last?.content?.text == "Streaming text")
+    }
+    
+    @Test func correctUsageWithAsyncBytesInJapanese() async throws {
+        let jsonData = Data(#"{"content":{"text":"こんにちは"}}"#.utf8)
+
+        struct MockAsyncBytes: AsyncSequence, Sendable {
+            typealias Element = UInt8
+
+            let data: Data
+
+            struct AsyncIterator: AsyncIteratorProtocol {
+                var iterator: Data.Iterator
+
+                mutating func next() async throws -> UInt8? {
+                    return iterator.next()
+                }
+            }
+
+            func makeAsyncIterator() -> AsyncIterator {
+                return AsyncIterator(iterator: data.makeIterator())
+            }
+        }
+
+        let mockAsyncBytes = MockAsyncBytes(data: jsonData)
+
+        var results: [Response] = []
+        for try await chunk in incrementalDecode(Response.self, from: mockAsyncBytes) {
+            results.append(chunk)
+        }
+
+        #expect(results.count > 0)
+        #expect(results.first?.content?.text == nil)
+        #expect(results.last?.content?.text == "こんにちは")
+    }
 }

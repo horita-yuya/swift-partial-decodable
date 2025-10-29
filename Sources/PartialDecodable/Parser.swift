@@ -479,3 +479,20 @@ public struct IncrementalJSONParser<T, S: AsyncSequence>: AsyncSequence where S.
 public func incrementalDecode<T: Decodable, S: AsyncSequence>(_ type: T.Type, from stream: S, decoder: JSONDecoder = JSONDecoder()) -> IncrementalJSONParser<T, S> where S.Element == String {
     return IncrementalJSONParser(stream, decoder: decoder)
 }
+
+public func incrementalDecode<T: Decodable, S: AsyncSequence & Sendable>(_ type: T.Type, from asyncBytes: S, decoder: JSONDecoder = JSONDecoder()) -> IncrementalJSONParser<T, AsyncStream<String>> where S.Element == UInt8 {
+    let stringStream = AsyncStream<String> { continuation in
+        Task {
+            do {
+                for try await c in asyncBytes.characters {
+                    print("\(c)")
+                    continuation.yield(String(c))
+                }
+                continuation.finish()
+            } catch {
+                continuation.finish()
+            }
+        }
+    }
+    return IncrementalJSONParser(stringStream, decoder: decoder)
+}

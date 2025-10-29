@@ -264,3 +264,43 @@ import Foundation
         #expect(last.inner?.value == "test")
     }
 }
+
+@Test func singleCharacterIncremental() async throws {
+    struct Content: Decodable, Equatable {
+        var text: String?
+    }
+
+    struct Response: Decodable, Equatable {
+        var content: Content?
+    }
+
+    let chunks = AsyncStream<String> { continuation in
+        continuation.yield("{")
+        continuation.yield("\"")
+        continuation.yield("cont")
+        continuation.yield("ent")
+        continuation.yield("\"")
+        continuation.yield(":")
+        continuation.yield(" {")
+        continuation.yield("\"")
+        continuation.yield("tex")
+        continuation.yield("t")
+        continuation.yield("\"")
+        continuation.yield(":")
+        continuation.yield(" \"")
+        continuation.yield("Hell")
+        continuation.yield("o")
+        continuation.yield("\"")
+        continuation.yield("}")
+        continuation.yield("}")
+        continuation.finish()
+    }
+
+    var results: [Response] = []
+    for try await chunk in incrementalDecode(Response.self, from: chunks) {
+        results.append(chunk)
+    }
+
+    #expect(results.count > 0)
+    #expect(results.last?.content?.text == "Hello")
+}

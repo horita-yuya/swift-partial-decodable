@@ -134,17 +134,11 @@ private class Input {
     @discardableResult
     func tryToExpandBuffer() async throws -> Bool {
         if bufferComplete {
-            if moreContentExpected {
-                throw JSONError.unexpectedEndOfContent
-            }
             return false
         }
 
         guard let next = try await iterator.next() else {
             bufferComplete = true
-            if moreContentExpected {
-                throw JSONError.unexpectedEndOfContent
-            }
             return false
         }
 
@@ -217,6 +211,7 @@ public class Tokenizer {
     private let handler: TokenHandler
     private var stack: [TokenizerState] = [.expectingValue]
     private var emittedTokens = 0
+    private var triedAfterComplete = false
 
     public init<S: AsyncSequence>(_ stream: S, handler: TokenHandler) where S.Element == String {
         self.input = Input(stream)
@@ -250,8 +245,16 @@ public class Tokenizer {
 
             let expanded = try await input.tryToExpandBuffer()
             if !expanded {
-                continue
+                if input.bufferComplete {
+                    if triedAfterComplete {
+                        throw JSONError.unexpectedEndOfContent
+                    }
+                    triedAfterComplete = true
+                    continue
+                }
+                throw JSONError.internalError("tryToExpandBuffer returned false but buffer is not complete")
             }
+            triedAfterComplete = false
         }
     }
 
@@ -316,7 +319,6 @@ public class Tokenizer {
                 }
 
                 if i == input.length && !input.bufferComplete {
-                    input.moreContentExpected = false
                     return
                 }
 
@@ -326,7 +328,6 @@ public class Tokenizer {
                 handler.handleNumber(number)
                 emittedTokens += 1
                 stack.removeLast()
-                input.moreContentExpected = true
                 return
             }
         }

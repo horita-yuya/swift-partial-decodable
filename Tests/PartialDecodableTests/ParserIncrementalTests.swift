@@ -153,3 +153,114 @@ import Foundation
 
     #expect(actuals == expects.compactMap { $0 })
 }
+
+@Test func testNestedStructWithArrays() async throws {
+    struct Content: Decodable, Equatable {
+        var text: String?
+        var metadata: String?
+    }
+
+    struct Item: Decodable, Equatable {
+        var data: Content?
+        var description: String?
+    }
+
+    struct Container: Decodable, Equatable {
+        var mainContent: Content?
+        var items: [Item]?
+    }
+
+    let chunks = AsyncStream<String> { continuation in
+        continuation.yield(#"{"mainContent": {"text": "Hi — are"#)
+        continuation.yield(#" you there?"}}"#)
+        continuation.finish()
+    }
+
+    var actuals: [Container] = []
+    for try await decoded in incrementalDecode(Container.self, from: chunks) {
+        actuals.append(decoded)
+    }
+
+    #expect(actuals.count > 0)
+    if let last = actuals.last {
+        #expect(last.mainContent?.text == "Hi — are you there?")
+    }
+}
+
+@Test func testSingleCharacterChunks() async throws {
+    struct Simple: Decodable, Equatable {
+        var key: String?
+    }
+
+    let json = #"{"key":"value"}"#
+    let chunks = AsyncStream<String> { continuation in
+        for char in json {
+            continuation.yield(String(char))
+        }
+        continuation.finish()
+    }
+
+    var actuals: [Simple] = []
+    for try await decoded in incrementalDecode(Simple.self, from: chunks) {
+        actuals.append(decoded)
+    }
+
+    #expect(actuals.count > 0)
+    if let last = actuals.last {
+        #expect(last.key == "value")
+    }
+}
+
+@Test func testCharByCharObjectWithNestedObject() async throws {
+    struct Content: Decodable, Equatable {
+        var text: String?
+    }
+
+    struct Container: Decodable, Equatable {
+        var content: Content?
+    }
+
+    let json = #"{"content":{"text":"Hi"}}"#
+    let chunks = AsyncStream<String> { continuation in
+        for char in json {
+            continuation.yield(String(char))
+        }
+        continuation.finish()
+    }
+
+    var actuals: [Container] = []
+    for try await decoded in incrementalDecode(Container.self, from: chunks) {
+        actuals.append(decoded)
+    }
+
+    #expect(actuals.count > 0)
+    if let last = actuals.last {
+        #expect(last.content?.text == "Hi")
+    }
+}
+
+@Test func testChunkedNestedObject() async throws {
+    struct Inner: Decodable, Equatable {
+        var value: String?
+    }
+
+    struct Outer: Decodable, Equatable {
+        var inner: Inner?
+    }
+
+    let chunks = AsyncStream<String> { continuation in
+        continuation.yield("{\"inner\":")
+        continuation.yield(#"{"value":"test"}}"#)
+        continuation.finish()
+    }
+
+    var actuals: [Outer] = []
+    for try await decoded in incrementalDecode(Outer.self, from: chunks) {
+        actuals.append(decoded)
+    }
+
+    #expect(actuals.count > 0)
+    if let last = actuals.last {
+        #expect(last.inner?.value == "test")
+    }
+}

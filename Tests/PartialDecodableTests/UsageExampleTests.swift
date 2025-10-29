@@ -165,7 +165,7 @@ import Foundation
         let mockAsyncBytes = MockAsyncBytes(data: jsonData)
 
         var results: [Response] = []
-        for try await chunk in incrementalDecode(Response.self, from: mockAsyncBytes) {
+        for try await chunk in incrementalDecode(Response.self, asyncBytes: mockAsyncBytes) {
             results.append(chunk)
         }
 
@@ -197,7 +197,7 @@ import Foundation
         let mockAsyncBytes = MockAsyncBytes(data: jsonData)
 
         var results: [Response] = []
-        for try await chunk in incrementalDecode(Response.self, from: mockAsyncBytes) {
+        for try await chunk in incrementalDecode(Response.self, asyncBytes: mockAsyncBytes) {
             results.append(chunk)
         }
 
